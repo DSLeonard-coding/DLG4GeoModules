@@ -14,14 +14,22 @@ You only need to use the provided one for most uses, and add content in your own
 
 Geometries are modular with runtime recipe selection.   Materials are selected by user defined name or NIST name.
 
-It is now packaged with [DLG4::VolumeBuilders](README.md) and uses features from it.
+It is used by the demo for  [DLG4::VolumeBuilders](https://www.github.com/DSLeonard-coding/DLG4VolumeBuilders)  and is intended to be used with VolumeBuilders to use its materials helpers to access global materials within modules. 
 
 ## Modules
 
-The system uses compile-time pluggable, runtime selectable .cc and .inc (essentially headers) to add materials, modular geometry parts, and "context" variables that connect them.   
+The system uses compile-time pluggable, runtime selectable .cc and .inc (essentially headers, X-macro headers to be precise) to add materials, modular geometry parts, and "context" variables that connect them.   
 
 ### Recipes
-At present individual modules are not runtime-selectable, in part because not all define a world volume.  Instead pre-defined recipes are runtime selectable.  Most samples will define a short recipe that simply lists the materials module, detector module, and supporter modules it needs.  Run-time definable recipes could be added if there's a motivation.
+At present, individual modules are not runtime-selectable, in part because not all define a world volume.  Instead, pre-defined recipes are runtime selectable.  Most samples will define a short recipe that simply lists the materials module, detector module, and supporter modules it needs.  Run-time definable recipes could be added if there's a motivation.
+
+### Materials and Elements
+#### Local materials
+Materials can be defined in any module, such as MaterialsGeoModule.cc/inc, and are now accessed in other modules via their Geant global material names through VBHelpers::GetMaterial("some_name").  This is not really a feature of GeoModules, but is a more feature that was built for use by them and by DLG4VolumeBuilders
+
+#### NIST materials
+Nist materials are also retrieved the same way using the NIST material name.
+
 
 ### GeometryModules
 
@@ -33,16 +41,10 @@ context->myvar
 ```
 provides access to myvar.  This allows global interface variables for aligning modules.
 
-### Materials and Elements
-#### Local materials
-Materials can be defined in any module, such as MaterialsGeoModule.cc/inc, and are now accessed in other modules via their Geant global material names through VBHelpers::GetMaterial("some_name")
-#### NIST materials
-Nist materials are also retrieved the same way using the NIST material name.  Often this can
 
 Every .cc gets a .inc that declares its module name.  
 Every .inc can optionally declare a recipe that can be selected at runtime.
-Recipes are just a small bit of code, but generally just call module constructoin to construct 
-
+Recipes are just a small bit of code (accessed as dictionary of lambdas actually), but generally just call module construction to construct a base detector module, a sample geometry, and optionally removable items like supporters.  They can also call a Materials module though. 
 
 The interface has been completely refactored and, for the user, simplified.
 
@@ -55,34 +57,73 @@ You can define:
 In the geometry modules (the .cc files)  there is a "context" variable passed.
 The geometries have access to the shared variable names and world pointer through that.
 
+for example:
+```cpp
 context->your_shared_variable
 context->Colors.white  
 context->SetWorldVolume(logical_volume_ptr)
 context->GetWorldVolume()
+```
 
 You can also call other modules through
+```cpp
 context->ConstructGeoModule("SomeModule")
+```
 
-Methods are made available via the VolumeBuilders libraries,
-particularly through the VBHelpers alias:
+If you include VolumeBuilders (you should) Methods are made available via the VolumeBuilders libraries, particularly through the VBHelpers alias:
 
+```cpp
 VBHelpers::GetMaterial("copper")
 VBHelpers::GetElement("Pb")
 VBHelpers::CopyMaterial("old","new",density,unit)
-
+```
 
 GetMaterial now operates by name and accepts NIST material names.
 
 Methods are made available via the VolumeBuilders libraries,
 particularly through the VBHelpers alias:
 
+
+
 ### Builing a new project 
 
 There are a few details to the format of the module file, particularly how they include their own .inc files.
 
-While the library is very modular now, still the best way to use it is just to copy the demo folder to your project and change the VolumeBuilders and GeoModules directories in the CMakeLists.txt to point back to the respective sources.
+While the library is very modular now, still the easiest way to use it is just to copy the demo folder to your project and change the VolumeBuilders and GeoModules directories in the CMakeLists.txt to point back to the respective sources.
 
 The provided demo has no physics or tracking included, just geometry, but demo/src/core/TheSimulation.cc (and .hh)  is ready to add them and comes with examples commented out for CupSim usage.
+
+To link against DLG4GeoModules and DLG4VolumeBuilders, you will generally need to install [DLG4GetRepos](https://www.github.com/DSLeonard-coding/GLG4GetRepos) with a one line wget command, and then include this in your CMakeLists.txt.
+```
+#-----------------------------------------------------------------------------#
+# CPM package management provided by DSLGetRepo wrapper. Install from:
+# www.github.dom/DSLeonard-coding/DSLGetRepos
+#-----------------------------------------------------------------------------#
+include(cmake/DSLGetRepos/DSLGetRepo.cmake)
+
+#-----------------------------------------------------------------------------#
+#VOLUMEBUILDERS
+#-----------------------------------------------------------------------------#
+set(VOLUMEBUILDERS_NO_DEMO ON CACHE BOOL "Disable demo executable build" FORCE)
+dsl_add_repo("VolumeBuilders" https://github.com/DSLeonard-coding/VolumeBuilders master)
+
+#-----------------------------------------------------------------------------#
+#Include the GeoModules source library config
+#-----------------------------------------------------------------------------#
+dsl_get_repo(DLG4GeoModules https://github.com/DSLeonard-coding/DLG4GeoModules master)
+include("${DLG4GeoModules_SOURCE_DIR}/GeoModulesConfig.cmake")
+...
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+        DLG4::VolumeBuilders
+         ...
+        )
+
+```
+And that's it.
+
+Because GeoModules uses header injectin, it does not use an add_subdirectory (or dsl_add_repo). It weaves itself into your top level code. 
+
 
 ### Create a module fast and easy using the clion templates
 You can copy and .cc and .inc in the demo/src/Geometries directories and just rename things. I'll go over that below.  But easiest is to just open the demo/CMakeLists.txt as a project in Clion (it's already configured for Clion, which has free versions)  and go to 
